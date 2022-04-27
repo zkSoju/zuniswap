@@ -12,20 +12,29 @@ contract ExchangeTest is Test {
     Exchange exchange;
     Token token;
 
-
     function setUp() public {
         console.log(unicode"🧪 Testing Exchange...");
-        exchange = Exchange(address(this));
-        token = Token("Zuni", "ZUNI", 1000);
+        token = new Token("Zuni", "ZNI", 1000);
+        exchange = new Exchange(address(token));
     }
 
-    // VM Cheatcodes can be found in ./lib/forge-std/src/Vm.sol
-    // Or at https://github.com/foundry-rs/forge-std
     function testExchange() public {
         startHoax(address(1337), address(1337));
+        token.mint(address(1337), 1000);
         token.approve(address(exchange), 1000);
-        exchange.addLiquidity(1000);
-        assert(exchange.getReserve() == uint256(1000));
-    }
+        exchange.addLiquidity{value: 100}(200); // 1 ETH <-> 2 ZUNI
+        assert(exchange.getReserve() == uint256(200));
 
+        // Test slippage
+
+        // With values that exceed/attempt to drain pool the exchange rate is different than
+        // what you would expect (constant product formula)
+        console.log(exchange.getTokenAmount(1));
+        console.log(exchange.getTokenAmount(100));
+        console.log(exchange.getTokenAmount(1000));
+
+        console.log(exchange.getEthAmount(2));
+        console.log(exchange.getEthAmount(200));
+        console.log(exchange.getEthAmount(2000));
+    }
 }
