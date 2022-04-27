@@ -1,5 +1,7 @@
 pragma solidity 0.8.13;
 
+import {ERC20} from "@solmate/tokens/ERC20.sol";
+
 interface IERC20 {
     function balanceOf(address) external view returns (uint256);
 
@@ -12,18 +14,60 @@ interface IERC20 {
     ) external;
 }
 
-contract Exchange {
+contract Exchange is ERC20 {
     address public tokenAddress;
 
-    constructor(address _token) {
+    constructor(address _token) ERC20("Zuniswap-V1", "ZUNI-V1", 18) {
         require(_token != address(0), "invalid token address");
 
         tokenAddress = _token;
     }
 
-    function addLiquidity(uint256 _tokenAmount) public payable {
-        IERC20 token = IERC20(tokenAddress);
-        token.transferFrom(msg.sender, address(this), _tokenAmount);
+    function addLiquidity(uint256 _tokenAmount)
+        public
+        payable
+        returns (uint256)
+    {
+        if (getReserve() == 0) {
+            IERC20 token = IERC20(tokenAddress);
+            token.transferFrom(msg.sender, address(this), _tokenAmount);
+
+            uint256 liquidity = address(this).balance;
+            _mint(msg.sender, liquidity);
+
+            return liquidity;
+        } else {
+            uint256 ethReserve = address(this).balance - msg.value;
+            uint256 tokenReserve = getReserve();
+            // required token deposit given ETH deposit and ratio of reserves
+            uint256 tokenAmount = (msg.value * tokenReserve) / ethReserve;
+            require(_tokenAmount >= tokenAmount, "invalid token amount");
+
+            IERC20 token = IERC20(tokenAddress);
+            token.transferFrom(msg.sender, address(this), tokenAmount);
+
+            uint256 liquidity = (totalSupply * msg.value) / ethReserve;
+            _mint(msg.sender, liquidity);
+
+            return liquidity;
+        }
+    }
+
+    function removeLiquidity(uint256 _amount)
+        public
+        returns (uint256, uint256)
+    {
+        require(_amount > 0, "invalid amount");
+
+        // withdraws are balanced in respect to ratio the LP tokens minted to current reserves
+        uint256 ethAmount = (address(this).balance * _amount) / totalSupply;
+        uint256 tokenAmount = (getReserve() * _amount) / totalSupply;
+
+        _burn(msg.sender, _amount);
+        payable(msg.sender).transfer(ethAmount);
+        IERC20(tokenAddress).transfer(msg.sender, tokenAmount);
+
+        return (ethAmount, tokenAmount);
     }
 
     function getAmount(
@@ -33,7 +77,12 @@ contract Exchange {
     ) private pure returns (uint256) {
         require(inputReserve > 0 && outputReserve > 0, "invalid reserves");
 
-        return (inputAmount * outputReserve) / (inputReserve + inputAmount);
+        // takes a 1% cut in fees
+        // uniswap takes 0.3% but using 1% here for readability z
+        uint256 inputAmountWithFee = inputAmount * 99;
+        uint256 numerator = inputAmountWithFee * outputReserve;
+        uint256 denominator = (inputReserve * 100) + inputAmountWithFee;
+        return numerator / denominator;
     }
 
     /// @dev Gets amount of tokens to return in exchange for ETH input
