@@ -2,6 +2,10 @@ pragma solidity 0.8.13;
 
 import {ERC20} from "@solmate/tokens/ERC20.sol";
 
+interface IFactory {
+    function getExchange(address _tokenAddress) public view returns (uint256);
+}
+
 interface IERC20 {
     function balanceOf(address) external view returns (uint256);
 
@@ -16,11 +20,13 @@ interface IERC20 {
 
 contract Exchange is ERC20 {
     address public tokenAddress;
+    address public factoryAddress;
 
     constructor(address _token) ERC20("Zuniswap-V1", "ZUNI-V1", 18) {
         require(_token != address(0), "invalid token address");
 
         tokenAddress = _token;
+        factoryAddress = msg.sender;
     }
 
     function addLiquidity(uint256 _tokenAmount)
@@ -112,7 +118,10 @@ contract Exchange is ERC20 {
     // at least minTokens amount
 
     // protects users from front-running bots that try to intercept tx and modify pool balances for profit
-    function ethToTokenSwap(uint256 _minTokens) public payable {
+    function ethToTokenSwap(uint256 _minTokens, uint256 recipient)
+        public
+        payable
+    {
         uint256 tokenReserve = getReserve();
 
         // we need to subtract msg.value because at this point in the function, the balance is
@@ -128,7 +137,12 @@ contract Exchange is ERC20 {
 
         require(tokensBought >= _minTokens, "insufficient output amount");
 
-        IERC20(tokenAddress).transfer(msg.sender, tokensBought);
+        IERC20(tokenAddress).transfer(recipient, tokensBought);
+    }
+
+    // @dev ethToToken call for usage with msg.sender as the user initiating the trade
+    function ethToTokenSwap(uint256 _minTokens) public payable {
+        ethToToken(_minTokens, msg.sender);
     }
 
     function tokenToEthSwap(uint256 _tokensSold, uint256 _minEth) public {
@@ -147,5 +161,44 @@ contract Exchange is ERC20 {
             _tokensSold
         );
         payable(msg.sender).transfer(ethBought);
+    }
+
+    function tokenToTokenSwap(
+        uint256 _tokensSold,
+        uint256 _minTokensBought,
+        address _tokenAddress
+    ) public {
+        // interfaces don't allow access state variable, so we need getter functions
+        address exchangeAddress = IFactory(factoryAddress).getExchange(
+            _tokenAddress
+        );
+
+        require(
+            exchangeAddress != address(this) && exchangeAddress != address(0),
+            "invalid exchange address"
+        );
+
+        // calculate deposited tokens -> ETH
+        uint256 tokenReserve = getReserve();
+        uint256 ethBought = getAmount(
+            _tokensSold,
+            tokenReserve,
+            address(this).balance
+        );
+
+        // deposit tokens into this exchange contract
+        IERC20(tokenAddress).transferFrom(
+            msg.sender,
+            address(this),
+            _tokensSold
+        );
+
+        // execute a swap with another ETH -> desired tokens pool
+        // and specify msg.sender of this function call to receive the desired tokens
+        // otherwise this contract will be msg.sender
+        IExchange(exchangeAddress).ethToTokenSwap{value: ethBought}(
+            _minTokensBought,
+            msg.sender
+        );
     }
 }

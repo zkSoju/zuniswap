@@ -29,17 +29,23 @@ contract ExchangeTest is Test {
         exchange.addLiquidity{value: 100}(200); // 1 ETH <-> 2 ZNI
         assert(exchange.getReserve() == uint256(200));
 
-        // Test slippage
-
         // With values that exceed/attempt to drain pool the exchange rate is different than
-        // what you would expect (constant product formula)
+        // what you would expect (constant product formula) - called slippage
+
+        // Closer to the pool reserve balance, the greater the slippage
+
+        console.log(unicode"🔨 Testing ETH -> ZNI exchange rates...");
         console.log(exchange.getTokenAmount(1));
+        console.log(exchange.getTokenAmount(10));
         console.log(exchange.getTokenAmount(100));
         console.log(exchange.getTokenAmount(1000));
 
+        console.log(unicode"🔨 Testing ZNI -> ETH exchange rates...");
         console.log(exchange.getEthAmount(2));
+        console.log(exchange.getEthAmount(20));
         console.log(exchange.getEthAmount(200));
         console.log(exchange.getEthAmount(2000));
+        console.log(unicode"✅ Slippage tests passed.");
     }
 
     function testLPRewards() public {
@@ -56,6 +62,7 @@ contract ExchangeTest is Test {
         assertEq(token.balanceOf(user), 0);
 
         // Expect at least 18 tokens provided slippage and 1% fee
+        // Slippage caused by 10% of reserves
         exchange.ethToTokenSwap{value: 10}(18);
         assertEq(token.balanceOf(user), 18);
         vm.stopPrank();
@@ -63,11 +70,13 @@ contract ExchangeTest is Test {
         vm.startPrank(lp, lp);
         assertEq(lp.balance, 0);
         assertEq(token.balanceOf(lp), 0);
-        console.log(lp.balance);
-        // we receive about 109.9 ethers and 181.98 tokens
+        // we receive about 110 ethers and 182 tokens as expected
         exchange.removeLiquidity(100);
-        console.log("lp after balance", token.balanceOf(lp));
+        console.log("LP token balance after", token.balanceOf(lp));
+        console.log("LP ether balance after", lp.balance);
 
         vm.stopPrank();
+
+        console.log(unicode"✅ LP rewards and impermanent loss tests passed.");
     }
 }
