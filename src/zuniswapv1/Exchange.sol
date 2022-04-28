@@ -3,7 +3,13 @@ pragma solidity 0.8.13;
 import {ERC20} from "@solmate/tokens/ERC20.sol";
 
 interface IFactory {
-    function getExchange(address _tokenAddress) public view returns (uint256);
+    function getExchange(address _tokenAddress) external view returns (address);
+}
+
+interface IExchange {
+    function ethToToken(uint256 _minTokens, address _recipient)
+        external
+        payable;
 }
 
 interface IERC20 {
@@ -118,10 +124,7 @@ contract Exchange is ERC20 {
     // at least minTokens amount
 
     // protects users from front-running bots that try to intercept tx and modify pool balances for profit
-    function ethToTokenSwap(uint256 _minTokens, uint256 recipient)
-        public
-        payable
-    {
+    function ethToToken(uint256 _minTokens, address recipient) public payable {
         uint256 tokenReserve = getReserve();
 
         // we need to subtract msg.value because at this point in the function, the balance is
@@ -196,7 +199,7 @@ contract Exchange is ERC20 {
         // execute a swap with another ETH -> desired tokens pool
         // and specify msg.sender of this function call to receive the desired tokens
         // otherwise this contract will be msg.sender
-        IExchange(exchangeAddress).ethToTokenSwap{value: ethBought}(
+        IExchange(exchangeAddress).ethToToken{value: ethBought}(
             _minTokensBought,
             msg.sender
         );

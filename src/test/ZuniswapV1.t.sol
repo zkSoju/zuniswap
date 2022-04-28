@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.13;
 
-import {Exchange} from "../Exchange.sol";
-import {Token} from "../Token.sol";
+import {Exchange} from "../zuniswapv1/Exchange.sol";
+import {MockERC20} from "@solmate/test/utils/mocks/MockERC20.sol";
 
 import "@std/Test.sol";
 
-contract ExchangeTest is Test {
+contract ZuniswapV1Test is Test {
     using stdStorage for StdStorage;
 
     Exchange exchange;
-    Token token;
+    MockERC20 token;
     address user;
     address lp;
 
     function setUp() public {
         console.log(unicode"🧪 Testing Exchange...");
-        token = new Token("Zuni", "ZNI", 1000);
+        token = new MockERC20("Zuni", "ZNI", 18);
         exchange = new Exchange(address(token));
         user = address(1337);
         lp = address(0xBEEF);
@@ -70,7 +70,8 @@ contract ExchangeTest is Test {
         vm.startPrank(lp, lp);
         assertEq(lp.balance, 0);
         assertEq(token.balanceOf(lp), 0);
-        // we receive about 110 ethers and 182 tokens as expected
+        // We receive about 110 ethers and 182 tokens as expected
+        // Fee is already included in the exchange rate
         exchange.removeLiquidity(100);
         console.log("LP token balance after", token.balanceOf(lp));
         console.log("LP ether balance after", lp.balance);
